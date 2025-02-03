@@ -4,6 +4,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const logoutBtn = document.getElementById('logoutBtn');
     const refreshUsersBtn = document.getElementById('refreshUsers');
     const usersTable = document.getElementById('usersTable');
+    const refreshCoursesBtn = document.getElementById('refreshCourses');
+    const coursesTable = document.getElementById('coursesTable');
+    const addCourseBtn = document.getElementById('addCourseBtn');
+    const courseModal = document.getElementById('courseModal');
+    const closeModalBtn = document.getElementById('closeModal');
+    const courseForm = document.getElementById('courseForm');
+    const modalTitle = document.getElementById('modalTitle');
+    
+    let editingCourseId = null;
     
     if (registerForm) {
         registerForm.addEventListener('submit', async (e) => {
@@ -62,6 +71,60 @@ document.addEventListener('DOMContentLoaded', () => {
         loadUsers();
     }
     
+    if (refreshCoursesBtn) {
+        refreshCoursesBtn.addEventListener('click', loadCourses);
+        loadCourses();
+    }
+    
+    if (addCourseBtn) {
+        addCourseBtn.addEventListener('click', () => {
+            editingCourseId = null;
+            modalTitle.textContent = 'Adicionar Curso';
+            courseForm.reset();
+            courseModal.classList.remove('hidden');
+        });
+    }
+    
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            courseModal.classList.add('hidden');
+        });
+    }
+    
+    if (courseForm) {
+        courseForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('courseName').value;
+            const description = document.getElementById('courseDescription').value;
+            const price = parseFloat(document.getElementById('coursePrice').value) * 100; // Convert to cents
+            
+            const token = localStorage.getItem('token');
+            
+            let url = '';
+            let method = 'POST';
+            let body = {name, description, price};
+            
+            if (editingCourseId) {
+                url = `http://localhost:8000/functions/auth3/admin_update_course`;
+                body.id = editingCourseId;
+            } else {
+                url = `http://localhost:8000/functions/auth3/admin_add_course`;
+            }
+            
+            const response = await fetch(url, {
+                method,
+                headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+                body: JSON.stringify(body)
+            });
+            const result = await response.json();
+            alert(result.message);
+            if (result.success) {
+                courseModal.classList.add('hidden');
+                loadCourses();
+            }
+        });
+    }
+    
     async function loadUsers() {
         const token = localStorage.getItem('token');
         const response = await fetch('http://localhost:8000/functions/auth3/admin_get_users', {
@@ -87,6 +150,40 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         } else {
             alert(result.message);
+            if (result.message === 'Autenticação necessária') {
+                logoutBtn.click();
+            }
+        }
+    }
+
+    async function loadCourses() {
+        const token = localStorage.getItem('token');
+        const response = await fetch('http://localhost:8000/functions/auth3/admin_get_courses', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+        });
+        const result = await response.json();
+        if (result.success) {
+            coursesTable.innerHTML = '';
+            result.courses.forEach(course => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="py-2 px-4 border-b">${course.id}</td>
+                    <td class="py-2 px-4 border-b">${course.name}</td>
+                    <td class="py-2 px-4 border-b">${course.description}</td>
+                    <td class="py-2 px-4 border-b">${(course.price / 100).toFixed(2)}</td>
+                    <td class="py-2 px-4 border-b">
+                        <button onclick="editCourse(${course.id})" class="bg-yellow-500 text-white px-2 py-1 rounded mr-2">Editar</button>
+                        <button onclick="deleteCourse(${course.id})" class="bg-red-500 text-white px-2 py-1 rounded">Deletar</button>
+                    </td>
+                `;
+                coursesTable.appendChild(tr);
+            });
+        } else {
+            alert(result.message);
+            if (result.message === 'Autenticação necessária') {
+                logoutBtn.click();
+            }
         }
     }
 
@@ -119,6 +216,44 @@ document.addEventListener('DOMContentLoaded', () => {
         alert(result.message);
         if (result.success) {
             loadUsers();
+        }
+    };
+
+    window.editCourse = async (id) => {
+        const token = localStorage.getItem('token');
+        const response = await fetch('http://localhost:8000/functions/auth3/admin_get_course', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify({id})
+        });
+        const result = await response.json();
+        if (result.success) {
+            editingCourseId = id;
+            modalTitle.textContent = 'Editar Curso';
+            document.getElementById('courseName').value = result.course.name;
+            document.getElementById('courseDescription').value = result.course.description;
+            document.getElementById('coursePrice').value = (result.course.price / 100).toFixed(2);
+            courseModal.classList.remove('hidden');
+        } else {
+            alert(result.message);
+            if (result.message === 'Autenticação necessária') {
+                logoutBtn.click();
+            }
+        }
+    };
+
+    window.deleteCourse = async (id) => {
+        if (!confirm('Tem certeza que deseja deletar este curso?')) return;
+        const token = localStorage.getItem('token');
+        const response = await fetch('http://localhost:8000/functions/auth3/admin_delete_course', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`},
+            body: JSON.stringify({id})
+        });
+        const result = await response.json();
+        alert(result.message);
+        if (result.success) {
+            loadCourses();
         }
     };
 });
